@@ -8,81 +8,71 @@ module.exports = async function handler(req, res) {
   try {
     const response = await fetch('https://wpapool.com/rankings/', {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; pool-dashboard/1.0)',
-        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`WPA responded with ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`WPA responded with ${response.status}`);
 
     const html = await response.text();
 
-    // WPA embed hun rankings als JSON in de pagina via een REST API call
-    // We parsen de tabel uit de HTML
+    // WPA embeds rankings as a JSON array directly in the HTML
+    // Pattern: [[[\"Rank\",\"Player\",\"WPA License Number\",\"Country\",\" Total Points \",...
+    const match = html.match(/\[\[\[["']Rank["']/);
+    if (!match) throw new Error('JSON data not found in WPA page');
+
+    // Extract the full JSON array — find start and balance brackets
+    const start = html.indexOf('[[[');
+    if (start === -1) throw new Error('Could not find data start');
+
+    let depth = 0;
+    let end = start;
+    for (let i = start; i < html.length; i++) {
+      if (html[i] === '[') depth++;
+      else if (html[i] === ']') {
+        depth--;
+        if (depth === 0) { end = i + 1; break; }
+      }
+    }
+
+    const jsonStr = html.slice(start, end);
+    const parsed = JSON.parse(jsonStr);
+
+    // Structure: [[ headers[], row[], row[], ... ]]
+    // parsed[0][0] = headers, parsed[0][1..] = data rows
+    const rows = parsed[0];
+    const headers = rows[0]; // ["Rank","Player","WPA License Number","Country"," Total Points ", ...]
+
+    const rankIdx = headers.findIndex(h => h.toString().trim() === 'Rank');
+    const nameIdx = headers.findIndex(h => h.toString().trim() === 'Player');
+    const countryIdx = headers.findIndex(h => h.toString().trim() === 'Country');
+    const ptsIdx = headers.findIndex(h => h.toString().includes('Total Points'));
+
     const players = [];
-
-    // Zoek de ranking tabel rijen
-    // WPA gebruikt <tr> rijen met klasse of data-attributes
-    // Patroon: <td>RANK</td><td>NAAM</td><td>LAND</td><td>PUNTEN</td>
-    const rowRegex = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
-    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    const stripTags = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&#039;/g,"'").trim();
-
-    const rows = html.match(rowRegex) || [];
-    
-    for (const row of rows) {
-      const cells = [];
-      let m;
-      const re = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-      while ((m = re.exec(row)) !== null) {
-        cells.push(stripTags(m[1]));
-      }
-      
-      if (cells.length >= 4) {
-        const rank = parseInt(cells[0]);
-        if (!isNaN(rank) && rank >= 1 && rank <= 100) {
-          const pts = parseInt(cells[3]?.replace(/[^0-9]/g, ''));
-          if (!isNaN(pts) && pts > 0) {
-            players.push({
-              r: rank,
-              n: cells[1] || '',
-              c: cells[2]?.toUpperCase().slice(0,3) || '???',
-              pts: pts
-            });
-          }
-        }
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const rank = parseInt(row[rankIdx]);
+      const pts = parseInt(String(row[ptsIdx]).replace(/[^0-9]/g, ''));
+      if (!isNaN(rank) && rank >= 1) {
+        players.push({
+          r: rank,
+          n: String(row[nameIdx] || '').trim(),
+          c: String(row[countryIdx] || '').trim().toUpperCase().slice(0, 3),
+          pts: isNaN(pts) ? 0 : pts
+        });
       }
     }
 
-    // Fallback: als scraping faalt, geef de bekende top-42 terug
-    if (players.length < 5) {
-      return res.status(200).json({
-        source: 'fallback',
-        updated: new Date().toISOString(),
-        note: 'WPA pagina kon niet worden gescraped — statische data getoond',
-        players: FALLBACK
-      });
-    }
-
-    // Dedupliceer op rank (bij gedeelde posities beide bewaren)
-    const seen = new Set();
-    const unique = players.filter(p => {
-      const key = p.n + p.r;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    if (players.length < 5) throw new Error('Too few players parsed: ' + players.length);
 
     return res.status(200).json({
       source: 'live',
       updated: new Date().toISOString(),
-      players: unique.slice(0, 50)
+      players: players.slice(0, 50)
     });
 
   } catch (err) {
-    // Bij elke fout: fallback data
     return res.status(200).json({
       source: 'fallback',
       updated: new Date().toISOString(),
@@ -137,4 +127,3 @@ const FALLBACK = [
   {r:41,n:'Morra, John',             c:'CAN', pts:14128},
   {r:42,n:'Bongers, Tobias',         c:'GER', pts:14000},
 ];
-
