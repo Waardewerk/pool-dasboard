@@ -166,9 +166,15 @@ main{max-width:900px;margin:0 auto;padding:2rem}
   <div id="tab-rankings" class="section active">
     <div class="stat-bar">
       <div class="stat-item"><div class="stat-l">Bron</div><div class="stat-v" style="font-size:.8rem">WPA Officieel</div></div>
-      <div class="stat-item"><div class="stat-l">#1 nu</div><div class="stat-v" style="font-size:.85rem">🇵🇱 Szewczyk</div></div>
-      <div class="stat-item"><div class="stat-l">Sterkste land</div><div class="stat-v" style="font-size:.85rem">🇵🇱 Polen (6×)</div></div>
-      <div class="stat-item"><div class="stat-l">Stand</div><div class="stat-v" style="font-size:.8rem">5 mei 2026</div></div>
+      <div class="stat-item"><div class="stat-l">#1 nu</div><div class="stat-v" style="font-size:.85rem" id="stat-num1">🇵🇱 Szewczyk</div></div>
+      <div class="stat-item"><div class="stat-l">Spelers</div><div class="stat-v" id="stat-count">42</div></div>
+      <div class="stat-item"><div class="stat-l">Stand</div><div class="stat-v" style="font-size:.75rem" id="stat-date">5 mei 2026</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <button onclick="fetchRankings()" id="refresh-btn" style="font-family:var(--mono);font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;padding:.4rem 1rem;background:var(--cloth);color:white;border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+        <span id="refresh-icon">↻</span> Ververs rankings
+      </button>
+      <span id="refresh-status" style="font-family:var(--mono);font-size:.65rem;color:#aaa"></span>
     </div>
 
     <div class="search-wrap">
@@ -321,26 +327,31 @@ function filterNat(n,btn){
 }
 
 const TOURN=[
-  {naam:'WPA 9-Ball World Championship',type:'WC',loc:'Wisselend',per:'Mei/Juni jaarlijks',
-   desc:'Het meest prestigieuze 9-ball toernooi ter wereld. Single elimination, 128 spelers uit 60+ landen. Winnaar 2025: Fedor Gorst (AIN).'},
-  {naam:'Predator WPA 10-Ball World Championship',type:'WC',loc:'Wisselend',per:'Voorjaar jaarlijks',
-   desc:'WK 10-ball. Winnaar 2025: Gorst. Telt volledig mee voor de WPA wereldranking.'},
-  {naam:'Yalin WPA Men\'s 8-Ball World Championship',type:'WC',loc:'Wisselend',per:'2026',
-   desc:'WK 8-ball. Winnaar 2026 telt zwaar mee — Szewczyk haalde hier 2500 rankingpunten.'},
+  // WERELDKAMPIOENSCHAPPEN
+  {naam:'WPA World 9-Ball Championship 2025',type:'WC',loc:'Jeddah, Saudi-Arabië',per:'21–26 juli 2025',
+   desc:'Winnaar: Carlo Biado (PHI). Georganiseerd door Matchroom & WPA. 128 spelers, prijs­geld $1.000.000. Race to 9 in de groepsfase, race to 11 in de knock-outfase, race to 15 in de finale.'},
+  {naam:'Yalin WPA Men\'s 8-Ball World Championship 2025',type:'WC',loc:'Bali, Indonesië',per:'2025',
+   desc:'Winnaar: Albin Ouschan (AUT). Zijn tweede wereldtitel na 2021. Gespeeld in Bali.'},
+  {naam:'Predator Pro Billiard Series – WPA Teams 10-Ball World Championship',type:'WC',loc:'Las Vegas, USA',per:'24–27 feb 2026',
+   desc:'Team 10-ball WK onderdeel van de PBS Las Vegas 2026. Gespeeld naast het Men\'s en Women\'s Open.'},
   {naam:'US Open 9-Ball Championship',type:'WC',loc:'Atlantic City, NJ, USA',per:'Oktober jaarlijks',
-   desc:'Oudste open toernooi ter wereld, opgericht 1976. Ko Pin Chung potte hier 99 ballen op rij — tot op heden ongeëvenaard.'},
+   desc:'Oudste open toernooi ter wereld, opgericht 1976. Ko Pin Chung potte hier 99 ballen op rij — tot op heden ongeëvenaard in officieel toernooispel.'},
+  // MOSCONI CUP
   {naam:'Mosconi Cup',type:'MC',loc:'Wisselt (London / Las Vegas)',per:'December jaarlijks',
-   desc:'Europa vs. USA — het meest emotionele event in pool. Ryder Cup-sfeer, 5 man per team. Opgericht 1994. Europa domineert de recente edities.'},
-  {naam:'Euro Tour – Predator Antalya Open',type:'ET',loc:'Antalya, Turkije',per:'Februari 2026',
-   desc:'Eerste Euro Tour stop van 2026. Szewczyk pakte hier 4320 rankingpunten. Onderdeel van WPA ranking.'},
-  {naam:'PBS Las Vegas Open',type:'ET',loc:'Las Vegas, USA',per:'2026',
-   desc:'Open event met sterke internationale deelname. Filler pakte hier 7200 punten in 2026.'},
-  {naam:'Qatar World Cup 10-Ball',type:'WC',loc:'Doha, Qatar',per:'2025',
-   desc:'High-level 10-ball event. Biado en Kazakis sterk aanwezig.'},
-  {naam:'International 9-Ball Open',type:'WC',loc:'Wisselend',per:'2025',
-   desc:'Sterk open 9-ball event. Biado: 2720 pts, Grabe: 3600 pts.'},
-  {naam:'9-Ball World Championship 2025',type:'WC',loc:'Wisselend',per:'2025',
-   desc:'Gorst won met 8100 punten, Biado tweede met 9000 punten. Meest punten-zwaar event van het seizoen.'},
+   desc:'Europa vs. USA teamcompetitie — het meest emotionele event in pool. Ryder Cup-sfeer, 5 man per team. Opgericht 1994. Europa domineert de recente edities.'},
+  // WNT / PRO TOUR
+  {naam:'WNT Legends – Manila',type:'ET',loc:'Manila, Filipijnen',per:'22–24 jan 2026',
+   desc:'Matchroom World Nineball Tour event. Elite invitational met de wereldtop. Onderdeel van de WPA ranking 2026.'},
+  {naam:'Premier League Pool 2026',type:'ET',loc:'Miami, Florida, USA',per:'18–22 feb 2026',
+   desc:'Matchroom WNT event. Round-robin format met de top 8 spelers ter wereld. Hoge kijkcijfers via Sky Sports en DAZN.'},
+  {naam:'Predator Pro Billiard Series – Las Vegas 2026',type:'ET',loc:'Las Vegas, USA',per:'18 feb – 27 feb 2026',
+   desc:'Groot multi-discipline event: Men\'s Open 10-ball (18–23 feb), Women\'s Open 10-ball (19–23 feb), Junior Open en Teams WK (24–27 feb). Aloysius Yapp won het Men\'s Open.'},
+  {naam:'Pattaya Open 2026',type:'ET',loc:'Pattaya, Thailand',per:'2–6 maart 2026',
+   desc:'WNT ranking event in Azië. Sterk Aziatisch en Filipijns deelnemersveld.'},
+  {naam:'Carabao International Open 2026',type:'ET',loc:'Jakarta, Indonesië',per:'4–8 feb 2026',
+   desc:'WNT ranking event. Onderdeel van de groeiende Aziatische pool tour.'},
+  {naam:'European Championships 2026',type:'ET',loc:'Antalya, Turkije',per:'28 feb – 13 maart 2026',
+   desc:'Multi-discipline EK: 9-ball, 10-ball, 14.1 en 8-ball. Sterk Europees veld. Polen dominant met Szewczyk, Maciol, Zielinski en Kural.'},
 ];
 
 let tF='all';
@@ -431,6 +442,61 @@ function showTab(id,btn){
   document.getElementById('tab-'+id).classList.add('active');
   btn.classList.add('active');
 }
+
+async function fetchRankings(){
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  const status = document.getElementById('refresh-status');
+  btn.disabled = true;
+  icon.style.display = 'inline-block';
+  icon.style.animation = 'spin .8s linear infinite';
+  status.textContent = 'Ophalen van wpapool.com…';
+
+  try {
+    const res = await fetch('/api/rankings');
+    const data = await res.json();
+
+    if (data.players && data.players.length > 0) {
+      // Update de globale WPA array
+      WPA.length = 0;
+      data.players.forEach(p => WPA.push(p));
+
+      // Update stat bar
+      const num1 = WPA[0];
+      if (num1) {
+        document.getElementById('stat-num1').textContent = (flag(num1.c)||'') + ' ' + num1.n.split(',')[0];
+      }
+      document.getElementById('stat-count').textContent = WPA.length;
+      const d = new Date(data.updated);
+      document.getElementById('stat-date').textContent = d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+
+      // Herrender tabel
+      natF = 'all';
+      document.querySelectorAll('#nat-filters .fb').forEach(b=>b.classList.remove('active'));
+      document.querySelector('#nat-filters .fb').classList.add('active');
+      renderR(WPA);
+
+      if (data.source === 'live') {
+        status.textContent = '✓ Live data — ' + WPA.length + ' spelers geladen';
+        status.style.color = '#4ade80';
+      } else {
+        status.textContent = '⚠ Fallback data — WPA tijdelijk niet bereikbaar';
+        status.style.color = '#f59e0b';
+      }
+    }
+  } catch(e) {
+    status.textContent = '✗ Fout: ' + e.message;
+    status.style.color = '#f87171';
+  } finally {
+    btn.disabled = false;
+    icon.style.animation = '';
+  }
+}
+
+// Spin animatie voor refresh icon
+const style = document.createElement('style');
+style.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+document.head.appendChild(style);
 
 renderR(WPA);renderT(TOURN);renderW();renderHof();
 </script>
