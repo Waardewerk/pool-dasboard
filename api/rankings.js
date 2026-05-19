@@ -3,68 +3,88 @@
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=3600'); // cache 1 uur op Vercel CDN
+  res.setHeader('Cache-Control', 's-maxage=3600');
 
   try {
     const response = await fetch('https://wpapool.com/rankings/', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
       }
     });
 
     if (!response.ok) throw new Error(`WPA responded with ${response.status}`);
-
     const html = await response.text();
 
-    // WPA embeds rankings as a JSON array directly in the HTML
-    // Pattern: [[[\"Rank\",\"Player\",\"WPA License Number\",\"Country\",\" Total Points \",...
-    const match = html.match(/\[\[\[["']Rank["']/);
-    if (!match) throw new Error('JSON data not found in WPA page');
-
-    // Extract the full JSON array — find start and balance brackets
-    const start = html.indexOf('[[[');
-    if (start === -1) throw new Error('Could not find data start');
-
-    let depth = 0;
-    let end = start;
-    for (let i = start; i < html.length; i++) {
-      if (html[i] === '[') depth++;
-      else if (html[i] === ']') {
-        depth--;
-        if (depth === 0) { end = i + 1; break; }
-      }
+    // De WPA pagina bevat meerdere JSON arrays (men, women, etc.)
+    // We zoeken specifiek de array NA "MEN'S PLAYER RANKING"
+    // De data staat als [[[\"Rank\",\"Player\",...],[ rijen ]]]
+    
+    // Vind alle posities van [[[ in de HTML
+    const allStarts = [];
+    let searchFrom = 0;
+    while (true) {
+      const idx = html.indexOf('[[[', searchFrom);
+      if (idx === -1) break;
+      allStarts.push(idx);
+      searchFrom = idx + 1;
     }
 
-    const jsonStr = html.slice(start, end);
-    const parsed = JSON.parse(jsonStr);
+    // Vind de positie van "MEN'S PLAYER RANKING" of "MEN" sectie
+    const menMarkers = ["MEN'S PLAYER RANKING", "MEN&#8217;S PLAYER RANKING", "PLAYER RANKING"];
+    let menPos = -1;
+    for (const marker of menMarkers) {
+      menPos = html.indexOf(marker);
+      if (menPos !== -1) break;
+    }
 
-    // Structure: [[ headers[], row[], row[], ... ]]
-    // parsed[0][0] = headers, parsed[0][1..] = data rows
+    // Kies de [[[  die het dichtst NA de men's marker staat
+    let chosenStart = -1;
+    if (menPos !== -1) {
+      for (const s of allStarts) {
+        if (s > menPos) { chosenStart = s; break; }
+      }
+    }
+    // Fallback: eerste array
+    if (chosenStart === -1 && allStarts.length > 0) chosenStart = allStarts[0];
+    if (chosenStart === -1) throw new Error('Geen data gevonden op WPA pagina');
+
+    // Extraheer de volledige JSON array via bracket balancing
+    let depth = 0, end = chosenStart;
+    for (let i = chosenStart; i < html.length; i++) {
+      if (html[i] === '[') depth++;
+      else if (html[i] === ']') { depth--; if (depth === 0) { end = i + 1; break; } }
+    }
+
+    const parsed = JSON.parse(html.slice(chosenStart, end));
     const rows = parsed[0];
-    const headers = rows[0]; // ["Rank","Player","WPA License Number","Country"," Total Points ", ...]
+    const headers = rows[0];
 
-    const rankIdx = headers.findIndex(h => h.toString().trim() === 'Rank');
-    const nameIdx = headers.findIndex(h => h.toString().trim() === 'Player');
-    const countryIdx = headers.findIndex(h => h.toString().trim() === 'Country');
-    const ptsIdx = headers.findIndex(h => h.toString().includes('Total Points'));
+    const rankIdx   = headers.findIndex(h => String(h).trim() === 'Rank');
+    const nameIdx   = headers.findIndex(h => String(h).trim() === 'Player');
+    const countryIdx= headers.findIndex(h => String(h).trim() === 'Country');
+    const ptsIdx    = headers.findIndex(h => String(h).includes('Total Points'));
+
+    if (rankIdx === -1 || nameIdx === -1) throw new Error('Headers niet herkend: ' + JSON.stringify(headers.slice(0,5)));
 
     const players = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const rank = parseInt(row[rankIdx]);
-      const pts = parseInt(String(row[ptsIdx]).replace(/[^0-9]/g, ''));
-      if (!isNaN(rank) && rank >= 1) {
-        players.push({
-          r: rank,
-          n: String(row[nameIdx] || '').trim(),
-          c: String(row[countryIdx] || '').trim().toUpperCase().slice(0, 3),
-          pts: isNaN(pts) ? 0 : pts
-        });
+      const pts  = parseInt(String(row[ptsIdx] ?? 0).replace(/[^0-9]/g, ''));
+      const name = String(row[nameIdx] || '').trim();
+      const country = String(row[countryIdx] || '').trim().toUpperCase().slice(0, 3);
+      // Filter: echte WPA landcodes zijn 3 letters, punten > 1000 voor top spelers
+      if (!isNaN(rank) && rank >= 1 && name && country.length === 3) {
+        players.push({ r: rank, n: name, c: country, pts: isNaN(pts) ? 0 : pts });
       }
     }
 
-    if (players.length < 5) throw new Error('Too few players parsed: ' + players.length);
+    if (players.length < 10) throw new Error(`Te weinig spelers (${players.length}) — verkeerde array`);
+
+    // Sorteer op rank, pak top 50
+    players.sort((a, b) => a.r - b.r);
 
     return res.status(200).json({
       source: 'live',
